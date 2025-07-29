@@ -1,0 +1,311 @@
+/**
+ * Product Mapping Dashboard Styles
+ */
+
+/* Header and Filters */
+.wpc-mapping-header {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.wpc-mapping-filters {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.wpc-mapping-filters input[type="text"],
+.wpc-mapping-filters select {
+    min-width: 200px;
+}
+
+.wpc-mapping-filters .button .dashicons {
+    margin-right: 5px;
+    vertical-align: text-bottom;
+}
+
+/* Legend */
+.wpc-mapping-legend {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.wpc-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: #555;
+}
+
+/* Status Dots */
+.wpc-status-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.wpc-status-dot.wpc-status-synced {
+    background-color: #46b450;
+}
+
+.wpc-status-dot.wpc-status-outdated {
+    background-color: #f0b849;
+}
+
+.wpc-status-dot.wpc-status-not-exists {
+    background-color: #ccc;
+}
+
+.wpc-status-dot.wpc-status-source {
+    background-color: #0073aa;
+}
+
+/* Mapping Table */
+.wpc-mapping-table-wrapper {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    overflow-x: auto;
+}
+
+.wpc-mapping-table {
+    margin: 0;
+    border: none;
+}
+
+.wpc-mapping-table th,
+.wpc-mapping-table td {
+    padding: 12px;
+    vertical-align: middle;
+}
+
+.wpc-product-column {
+    min-width: 250px;
+    width: 30%;
+}
+
+.wpc-site-column {
+    min-width: 150px;
+    text-align: center;
+}
+
+.wpc-source-site {
+    background-color: #f0f6fc;
+}
+
+.wpc-source-badge {
+    display: inline-block;
+    background: #0073aa;
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 5px;
+}
+
+/* Product Info */
+.wpc-product-info strong {
+    display: block;
+    margin-bottom: 5px;
+    color: #23282d;
+}
+
+.wpc-product-info small {
+    color: #666;
+    line-height: 1.4;
+}
+
+.wpc-product-info a {
+    font-size: 13px;
+}
+
+/* Status Indicators */
+.wpc-status-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.wpc-site-status {
+    text-align: center;
+}
+
+.wpc-site-status .button {
+    font-size: 12px;
+    padding: 0 8px;
+    height: 26px;
+    line-height: 24px;
+}
+
+/* Loading State */
+.wpc-loading {
+    text-align: center;
+    padding: 50px;
+}
+
+.wpc-loading .spinner {
+    float: none;
+    margin: 0 auto 20px;
+}
+
+/* No Products */
+.wpc-no-products {
+    text-align: center;
+    padding: 50px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+}
+
+/* Error */
+.wpc-error {
+    background: #fff;
+    border: 1px solid #dc3232;
+    border-left-width: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.wpc-error p {
+    margin: 0;
+    color: #dc3232;
+}
+
+/* Modal */
+.wpc-modal {
+    display: none;
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.wpc-modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 30px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.wpc-modal-close {
+    color: #aaa;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.wpc-modal-close:hover,
+.wpc-modal-close:focus {
+    color: #000;
+}
+
+#wpc-modal-title {
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+#wpc-modal-body .spinner {
+    float: none;
+    margin: 20px auto;
+    display: block;
+}
+
+/* Pagination */
+.wpc-pagination {
+    margin-top: 20px;
+}
+
+.wpc-pagination .tablenav-pages {
+    text-align: center;
+}
+
+.wpc-pagination a,
+.wpc-pagination span {
+    display: inline-block;
+    padding: 4px 8px;
+    margin: 0 2px;
+    border: 1px solid #ddd;
+    background: #f7f7f7;
+    text-decoration: none;
+    color: #0073aa;
+}
+
+.wpc-pagination a:hover {
+    background: #0073aa;
+    color: #fff;
+    border-color: #0073aa;
+}
+
+.wpc-pagination .current {
+    background: #0073aa;
+    color: #fff;
+    border-color: #0073aa;
+}
+
+/* Notices */
+.notice {
+    margin: 15px 0;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .wpc-mapping-table-wrapper {
+        overflow-x: scroll;
+    }
+}
+
+@media (max-width: 782px) {
+    .wpc-mapping-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .wpc-mapping-filters input[type="text"],
+    .wpc-mapping-filters select,
+    .wpc-mapping-filters .button {
+        width: 100%;
+        margin: 5px 0;
+    }
+    
+    .wpc-mapping-legend {
+        flex-wrap: wrap;
+    }
+    
+    .wpc-product-column {
+        min-width: 200px;
+    }
+    
+    .wpc-site-column {
+        min-width: 120px;
+    }
+    
+    .wpc-modal-content {
+        width: 95%;
+        margin: 10% auto;
+        padding: 20px;
+    }
+}
