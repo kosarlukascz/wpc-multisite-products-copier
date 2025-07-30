@@ -200,7 +200,13 @@
         function showStatus(message, type) {
             $statusMessage.text(message);
             $status.show();
-            $spinner.addClass('is-active');
+            
+            // Only show spinner for progress messages (no type specified)
+            if (!type) {
+                $spinner.addClass('is-active');
+            } else {
+                $spinner.removeClass('is-active');
+            }
             
             // Add status class
             $status.removeClass('notice-success notice-error');

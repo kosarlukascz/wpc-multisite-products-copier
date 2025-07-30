@@ -203,6 +203,21 @@ To add support for a new plugin/theme:
 
 ## Changelog
 
+### Version 1.1.5
+- Fixed critical bug where thumbnail was deleted when same image appeared in gallery
+- Modified copy_image_to_blog to preserve thumbnail during gallery updates
+
+### Version 1.1.3
+- Added multiple site selection on product page
+- Fixed initialization timing issues
+
+### Version 1.1.0
+- Added activity log tracking
+- Created network admin UI for viewing copy/update history
+- Added bulk operations for multiple products
+- Created product mapping dashboard
+- Enhanced documentation
+
 ### Version 1.0.7
 - Fixed Woodmart video gallery to find entries with URLs
 - Improved debug logging
