@@ -14,6 +14,7 @@ WPC Multisite Products Copier allows you to copy or update WooCommerce variable 
 - ✅ Update existing products (slug, images, gallery)
 - ✅ Automatic image copying and management
 - ✅ Preserve product attributes and terms
+- ✅ Automatic category assignment (matching by slug)
 - ✅ ACF (Advanced Custom Fields) support
 - ✅ Woodmart theme video gallery support
 - ✅ AJAX-powered admin interface
@@ -97,20 +98,22 @@ Supports Woodmart's video gallery feature:
 2. **Data Collection** - Gathers product data, meta, and custom fields
 3. **Blog Switch** - Switches to target blog
 4. **Product Creation** - Creates base product
-5. **Attribute Mapping** - Maps attributes and creates missing terms
-6. **Image Copying** - Copies featured and gallery images
-7. **Variation Creation** - Creates all product variations
-8. **Integration Handling** - Processes ACF and Woodmart data
-9. **Cleanup** - Syncs attributes and updates lookup tables
+5. **Category Assignment** - Maps categories by slug, creates missing ones
+6. **Attribute Mapping** - Maps attributes and creates missing terms
+7. **Image Copying** - Copies featured and gallery images
+8. **Variation Creation** - Creates all product variations
+9. **Integration Handling** - Processes ACF and Woodmart data
+10. **Cleanup** - Syncs attributes and updates lookup tables
 
 ### Product Update Flow
 
 1. **Data Collection** - Gets updated slug and images from source
 2. **Blog Switch** - Switches to target blog
 3. **Slug Update** - Updates product slug
-4. **Image Update** - Replaces featured and gallery images
-5. **Integration Update** - Updates Woodmart video gallery
-6. **Cleanup** - Removes unused old images
+4. **Category Update** - Updates categories to match source
+5. **Image Update** - Replaces featured and gallery images
+6. **Integration Update** - Updates Woodmart video gallery
+7. **Cleanup** - Removes unused old images
 
 ## API Reference
 
@@ -202,6 +205,12 @@ To add support for a new plugin/theme:
 3. Use blog switching utilities to manage context
 
 ## Changelog
+
+### Version 1.1.7
+- Added automatic category assignment functionality
+- Categories are matched by slug across blogs
+- Creates missing categories on target blog if needed
+- Preserves category hierarchy (parent/child relationships)
 
 ### Version 1.1.5
 - Fixed critical bug where thumbnail was deleted when same image appeared in gallery
