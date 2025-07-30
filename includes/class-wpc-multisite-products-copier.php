@@ -28,7 +28,7 @@ class WPC_Multisite_Products_Copier {
      *
      * @var string
      */
-    private $version = '1.1.3'; // Added multiple site selection on product page
+    private $version = '1.1.5'; // Fixed thumbnail not updating issue
 
     /**
      * Source blog ID (always 5)
@@ -1048,13 +1048,15 @@ class WPC_Multisite_Products_Copier {
      * @param int $source_blog_id Source blog ID
      * @return int|WP_Error New attachment ID or error
      */
-    private function copy_image_to_blog($attachment_id, $target_blog_id, $source_blog_id) {
+    private function copy_image_to_blog($attachment_id, $target_blog_id, $source_blog_id, $product_id = null, $skip_if_thumbnail = false) {
         $this->log("Starting image copy - VERSION " . $this->version, array(
             'attachment_id' => $attachment_id,
             'source_blog_id' => $source_blog_id,
             'target_blog_id' => $target_blog_id,
             'current_blog_id' => get_current_blog_id(),
-            'plugin_version' => $this->version
+            'plugin_version' => $this->version,
+            'product_id' => $product_id,
+            'skip_if_thumbnail' => $skip_if_thumbnail
         ));
         
         // Switch to source blog to get attachment data
@@ -1095,6 +1097,12 @@ class WPC_Multisite_Products_Copier {
         // Switch to target blog
         switch_to_blog($target_blog_id);
         
+        // Check if the existing attachment is currently set as thumbnail
+        $current_thumbnail_id = null;
+        if ($product_id && $skip_if_thumbnail) {
+            $current_thumbnail_id = get_post_thumbnail_id($product_id);
+        }
+        
         // FOR UPDATE: Always delete existing attachment and create new one
         // This ensures images are always updated during update operation
         $existing = get_posts(array(
@@ -1106,9 +1114,22 @@ class WPC_Multisite_Products_Copier {
         
         if (!empty($existing)) {
             $existing_id = $existing[0]->ID;
+            
+            // If this is the current thumbnail and we're processing gallery images, reuse it
+            if ($skip_if_thumbnail && $current_thumbnail_id && $existing_id == $current_thumbnail_id) {
+                $this->log("Existing attachment is current thumbnail, reusing it", array(
+                    'existing_id' => $existing_id,
+                    'filename' => $attached_file,
+                    'is_thumbnail' => true
+                ));
+                restore_current_blog();
+                return $existing_id;
+            }
+            
             $this->log("Found existing attachment, deleting it for update", array(
                 'existing_id' => $existing_id,
-                'filename' => $attached_file
+                'filename' => $attached_file,
+                'is_thumbnail' => ($existing_id == $current_thumbnail_id)
             ));
             
             // Delete the old attachment completely
@@ -1588,23 +1609,93 @@ class WPC_Multisite_Products_Copier {
                 
                 $new_thumbnail_id = $this->copy_image_to_blog($thumbnail_id, $target_blog_id, $source_blog_id);
                 if ($new_thumbnail_id && !is_wp_error($new_thumbnail_id)) {
+                    // Log before operations
+                    $this->log("Starting thumbnail update", array(
+                        'target_product_id' => $target_product_id,
+                        'new_thumbnail_id' => $new_thumbnail_id,
+                        'old_thumbnail_id' => $current_thumbnail_id,
+                        'current_blog_id' => get_current_blog_id(),
+                        'target_blog_id' => $target_blog_id
+                    ));
+                    
                     // Remove old thumbnail
                     if ($current_thumbnail_id) {
                         delete_post_thumbnail($target_product_id);
+                        // Add to images to check for cleanup later
+                        $images_to_check[] = $current_thumbnail_id;
+                    }
+                    
+                    // CRITICAL: Ensure we're on target blog before setting thumbnail
+                    if (get_current_blog_id() !== $target_blog_id) {
+                        switch_to_blog($target_blog_id);
+                        $this->log("Switched to target blog for thumbnail operations");
                     }
                     
                     // Set new thumbnail using multiple methods to ensure it's set
-                    set_post_thumbnail($target_product_id, $new_thumbnail_id);
-                    update_post_meta($target_product_id, '_thumbnail_id', $new_thumbnail_id);
+                    $set_result = set_post_thumbnail($target_product_id, $new_thumbnail_id);
+                    $meta_result = update_post_meta($target_product_id, '_thumbnail_id', $new_thumbnail_id);
+                    
+                    // Force clean the cache
+                    clean_post_cache($target_product_id);
+                    
+                    // Verify immediately
+                    $verify_thumb = get_post_thumbnail_id($target_product_id);
+                    $verify_meta = get_post_meta($target_product_id, '_thumbnail_id', true);
+                    
+                    $this->log("Thumbnail set results", array(
+                        'set_post_thumbnail_result' => $set_result,
+                        'update_post_meta_result' => $meta_result,
+                        'verify_get_post_thumbnail_id' => $verify_thumb,
+                        'verify_get_post_meta' => $verify_meta,
+                        'expected_id' => $new_thumbnail_id,
+                        'current_blog_id' => get_current_blog_id()
+                    ));
+                    
+                    // If verification failed, force update directly
+                    if ($verify_thumb != $new_thumbnail_id) {
+                        global $wpdb;
+                        
+                        // Delete any existing thumbnail meta
+                        $wpdb->delete(
+                            $wpdb->postmeta,
+                            array(
+                                'post_id' => $target_product_id,
+                                'meta_key' => '_thumbnail_id'
+                            )
+                        );
+                        
+                        // Insert new thumbnail meta
+                        $wpdb->insert(
+                            $wpdb->postmeta,
+                            array(
+                                'post_id' => $target_product_id,
+                                'meta_key' => '_thumbnail_id',
+                                'meta_value' => $new_thumbnail_id
+                            )
+                        );
+                        
+                        clean_post_cache($target_product_id);
+                        
+                        $this->log("Force updated thumbnail via direct DB", array(
+                            'product_id' => $target_product_id,
+                            'thumbnail_id' => $new_thumbnail_id,
+                            'verify_after_force' => get_post_thumbnail_id($target_product_id)
+                        ));
+                    }
                     
                     // Also set it on the product object
                     $target_product->set_image_id($new_thumbnail_id);
                     
-                    $this->log("Updated featured image", array(
+                    // Switch back to source blog if we switched
+                    if (get_current_blog_id() === $target_blog_id && $target_blog_id !== $source_blog_id) {
+                        switch_to_blog($source_blog_id);
+                        $this->log("Switched back to source blog after thumbnail");
+                    }
+                    
+                    $this->log("Updated featured image completed", array(
                         'product_id' => $target_product_id,
                         'new_thumbnail_id' => $new_thumbnail_id,
-                        'old_thumbnail_id' => $current_thumbnail_id,
-                        'verify_immediate' => get_post_thumbnail_id($target_product_id)
+                        'old_thumbnail_id' => $current_thumbnail_id
                     ));
                 } else {
                     $this->log("Failed to copy featured image", array(
@@ -1631,7 +1722,8 @@ class WPC_Multisite_Products_Copier {
                 // Reset gallery array (already declared above)
                 $new_gallery_ids = array();
                 foreach ($gallery_ids as $gallery_id) {
-                    $new_gallery_id = $this->copy_image_to_blog($gallery_id, $target_blog_id, $source_blog_id);
+                    // Pass product ID and skip_if_thumbnail flag to prevent deletion of current thumbnail
+                    $new_gallery_id = $this->copy_image_to_blog($gallery_id, $target_blog_id, $source_blog_id, $target_product_id, true);
                     if ($new_gallery_id && !is_wp_error($new_gallery_id)) {
                         $new_gallery_ids[] = $new_gallery_id;
                         $this->log("Copied gallery image", array(
@@ -1675,6 +1767,16 @@ class WPC_Multisite_Products_Copier {
                     // Re-set the images on the correct blog context
                     if ($new_thumbnail_id) {
                         $target_product->set_image_id($new_thumbnail_id);
+                        
+                        // DOUBLE CHECK: Force set thumbnail again on correct blog
+                        set_post_thumbnail($target_product_id, $new_thumbnail_id);
+                        update_post_meta($target_product_id, '_thumbnail_id', $new_thumbnail_id);
+                        
+                        $this->log("Re-set thumbnail on target blog before save", array(
+                            'product_id' => $target_product_id,
+                            'thumbnail_id' => $new_thumbnail_id,
+                            'verify' => get_post_thumbnail_id($target_product_id)
+                        ));
                     }
                     if (!empty($new_gallery_ids)) {
                         $target_product->set_gallery_image_ids($new_gallery_ids);
@@ -1702,16 +1804,69 @@ class WPC_Multisite_Products_Copier {
                 ));
             }
             
+            // Force update thumbnail as a fallback if we have one
+            if (isset($new_thumbnail_id) && $new_thumbnail_id) {
+                update_post_meta($target_product_id, '_thumbnail_id', $new_thumbnail_id);
+                set_post_thumbnail($target_product_id, $new_thumbnail_id);
+                
+                // Clear all caches
+                clean_post_cache($target_product_id);
+                wp_cache_delete($target_product_id, 'post_meta');
+                
+                $this->log("Force updated thumbnail after save", array(
+                    'product_id' => $target_product_id,
+                    'thumbnail_id' => $new_thumbnail_id
+                ));
+            }
+            
             // Verify the updates
             $verify_thumbnail = get_post_thumbnail_id($target_product_id);
             $verify_gallery = get_post_meta($target_product_id, '_product_image_gallery', true);
+            $verify_meta = get_post_meta($target_product_id, '_thumbnail_id', true);
+            
             $this->log("Verification after save", array(
                 'thumbnail_id' => $verify_thumbnail,
+                'thumbnail_meta' => $verify_meta,
                 'gallery_meta' => $verify_gallery,
                 'expected_thumbnail' => isset($new_thumbnail_id) ? $new_thumbnail_id : 'none',
                 'expected_gallery' => !empty($new_gallery_ids) ? implode(',', $new_gallery_ids) : 'none',
                 'current_blog_id' => get_current_blog_id()
             ));
+            
+            // Final attempt if thumbnail still not set
+            if (isset($new_thumbnail_id) && $new_thumbnail_id && ($verify_thumbnail != $new_thumbnail_id || $verify_meta != $new_thumbnail_id)) {
+                global $wpdb;
+                
+                $this->log("FINAL THUMBNAIL FIX ATTEMPT", array(
+                    'expected' => $new_thumbnail_id,
+                    'actual_func' => $verify_thumbnail,
+                    'actual_meta' => $verify_meta
+                ));
+                
+                // Direct SQL update
+                $wpdb->query($wpdb->prepare(
+                    "DELETE FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_thumbnail_id'",
+                    $target_product_id
+                ));
+                
+                $wpdb->query($wpdb->prepare(
+                    "INSERT INTO {$wpdb->postmeta} (post_id, meta_key, meta_value) VALUES (%d, '_thumbnail_id', %s)",
+                    $target_product_id,
+                    $new_thumbnail_id
+                ));
+                
+                clean_post_cache($target_product_id);
+                wp_cache_delete($target_product_id, 'post_meta');
+                wp_cache_delete($target_product_id . '_thumbnail_id', 'post_meta');
+                
+                // Final verification
+                $final_verify = get_post_thumbnail_id($target_product_id);
+                $this->log("Final verification after direct SQL", array(
+                    'thumbnail_id' => $final_verify,
+                    'expected' => $new_thumbnail_id,
+                    'success' => $final_verify == $new_thumbnail_id
+                ));
+            }
             
             // Handle Woodmart video gallery meta if gallery images were updated
             if (!empty($new_gallery_ids)) {
