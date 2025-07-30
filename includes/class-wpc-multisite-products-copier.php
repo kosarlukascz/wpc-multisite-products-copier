@@ -28,7 +28,7 @@ class WPC_Multisite_Products_Copier {
      *
      * @var string
      */
-    private $version = '1.1.8'; // Added variation stock management on update
+    private $version = '1.1.9'; // Disabled price sync during variation updates
 
     /**
      * Source blog ID (always 5)
@@ -1419,10 +1419,6 @@ class WPC_Multisite_Products_Copier {
             $backorders = $source_var->get_backorders();
             $low_stock_amount = get_post_meta($source_var_id, '_low_stock_amount', true);
             
-            // Also get prices while we're here
-            $regular_price = $source_var->get_regular_price();
-            $sale_price = $source_var->get_sale_price();
-            
             $this->log("Source variation stock data", array(
                 'variation_id' => $source_var_id,
                 'attributes' => $source_attributes,
@@ -1456,13 +1452,8 @@ class WPC_Multisite_Products_Copier {
                         }
                     }
                     
-                    // Also update prices
-                    if ($regular_price !== '') {
-                        $target_var->set_regular_price($regular_price);
-                    }
-                    if ($sale_price !== '') {
-                        $target_var->set_sale_price($sale_price);
-                    }
+                    // NOTE: Price sync is disabled during updates to allow independent pricing on target sites
+                    // Prices are only synced during initial product creation
                     
                     // Save the variation
                     $target_var->save();
