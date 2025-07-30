@@ -10,49 +10,122 @@
 
     $(document).ready(function() {
         var $metabox = $('.wpc-mpc-metabox');
-        var $siteSelect = $('#wpc_mpc_target_site');
-        var $createBtn = $('#wpc_mpc_create');
-        var $updateBtn = $('#wpc_mpc_update');
+        var $checkboxes = $('.wpc-target-site-checkbox');
+        var $createBtn = $('#wpc_mpc_create_multiple');
+        var $updateBtn = $('#wpc_mpc_update_multiple');
         var $status = $('.wpc-mpc-status');
         var $statusMessage = $status.find('.status-message');
         var $spinner = $status.find('.spinner');
+        
+        var isProcessing = false;
+        var processQueue = [];
+        var currentIndex = 0;
 
-        // Handle site selection change
-        $siteSelect.on('change', function() {
-            var selectedOption = $(this).find('option:selected');
-            var blogId = $(this).val();
-            var isSynced = selectedOption.data('synced') === 1;
-            var productId = selectedOption.data('product-id');
-
-            if (blogId) {
-                // Enable/disable buttons based on sync status
-                if (isSynced && productId) {
-                    $createBtn.prop('disabled', true);
-                    $updateBtn.prop('disabled', false);
-                } else {
-                    $createBtn.prop('disabled', false);
-                    $updateBtn.prop('disabled', true);
-                }
-            } else {
-                // No site selected
-                $createBtn.prop('disabled', true);
-                $updateBtn.prop('disabled', true);
-            }
+        // Handle checkbox changes
+        $checkboxes.on('change', updateButtonStates);
+        
+        // Handle select all/none/not synced links
+        $('#wpc-select-all').on('click', function(e) {
+            e.preventDefault();
+            $checkboxes.prop('checked', true);
+            updateButtonStates();
         });
+        
+        $('#wpc-select-none').on('click', function(e) {
+            e.preventDefault();
+            $checkboxes.prop('checked', false);
+            updateButtonStates();
+        });
+        
+        $('#wpc-select-not-synced').on('click', function(e) {
+            e.preventDefault();
+            $checkboxes.each(function() {
+                var isSynced = $(this).data('synced') === 1;
+                $(this).prop('checked', !isSynced);
+            });
+            updateButtonStates();
+        });
+
+        // Update button states based on selected checkboxes
+        function updateButtonStates() {
+            var selectedSites = getSelectedSites();
+            var hasSelection = selectedSites.length > 0;
+            var hasCreate = selectedSites.some(function(site) { return !site.synced; });
+            var hasUpdate = selectedSites.some(function(site) { return site.synced; });
+            
+            $createBtn.prop('disabled', !hasCreate);
+            $updateBtn.prop('disabled', !hasUpdate);
+        }
+
+        // Get selected sites with their sync status
+        function getSelectedSites() {
+            var sites = [];
+            $checkboxes.filter(':checked').each(function() {
+                sites.push({
+                    blogId: $(this).val(),
+                    synced: $(this).data('synced') === 1,
+                    productId: $(this).data('product-id')
+                });
+            });
+            return sites;
+        }
 
         // Handle create button click
         $createBtn.on('click', function() {
-            var blogId = $siteSelect.val();
+            var selectedSites = getSelectedSites().filter(function(site) {
+                return !site.synced;
+            });
             
-            if (!blogId) {
+            if (selectedSites.length === 0) {
                 alert(wpc_mpc_ajax.messages.select_site);
                 return;
             }
+            
+            if (confirm(sprintf(wpc_mpc_ajax.messages.confirm_create || 'Create product on %d selected sites?', selectedSites.length))) {
+                processQueue = selectedSites;
+                currentIndex = 0;
+                isProcessing = true;
+                processNextCreate();
+            }
+        });
 
-            // Show status
-            showStatus(wpc_mpc_ajax.messages.creating);
+        // Handle update button click
+        $updateBtn.on('click', function() {
+            var selectedSites = getSelectedSites().filter(function(site) {
+                return site.synced;
+            });
+            
+            if (selectedSites.length === 0) {
+                alert(wpc_mpc_ajax.messages.select_site);
+                return;
+            }
+            
+            if (confirm(sprintf(wpc_mpc_ajax.messages.confirm_update || 'Update product on %d selected sites?', selectedSites.length))) {
+                processQueue = selectedSites;
+                currentIndex = 0;
+                isProcessing = true;
+                processNextUpdate();
+            }
+        });
 
-            // Make AJAX request
+        // Process create queue
+        function processNextCreate() {
+            if (currentIndex >= processQueue.length || !isProcessing) {
+                // All done
+                hideSpinner();
+                if (currentIndex > 0) {
+                    showStatus(sprintf('Successfully created product on %d sites.', currentIndex), 'success');
+                    setTimeout(function() {
+                        location.reload();
+                    }, 2000);
+                }
+                return;
+            }
+            
+            var site = processQueue[currentIndex];
+            var progress = sprintf('Creating on site %d of %d...', currentIndex + 1, processQueue.length);
+            showStatus(progress);
+            
             $.ajax({
                 url: wpc_mpc_ajax.ajax_url,
                 type: 'POST',
@@ -60,51 +133,44 @@
                     action: 'wpc_mpc_create_product',
                     nonce: wpc_mpc_ajax.nonce,
                     product_id: wpc_mpc_ajax.product_id,
-                    target_blog_id: blogId
+                    target_blog_id: site.blogId
                 },
                 success: function(response) {
                     if (response.success) {
-                        showStatus(response.data.message, 'success');
+                        // Update checkbox data
+                        var $checkbox = $checkboxes.filter('[value="' + site.blogId + '"]');
+                        $checkbox.attr('data-synced', '1');
+                        $checkbox.attr('data-product-id', response.data.target_product_id);
                         
-                        // Update the select option to reflect sync status
-                        var $option = $siteSelect.find('option[value="' + blogId + '"]');
-                        $option.attr('data-synced', '1');
-                        $option.attr('data-product-id', response.data.target_product_id);
-                        
-                        // Update button states
-                        $createBtn.prop('disabled', true);
-                        $updateBtn.prop('disabled', false);
-                        
-                        // Reload the page after 2 seconds to show updated sync info
-                        setTimeout(function() {
-                            location.reload();
-                        }, 2000);
+                        currentIndex++;
+                        processNextCreate();
                     } else {
                         showStatus(response.data.message || wpc_mpc_ajax.messages.error, 'error');
+                        isProcessing = false;
                     }
                 },
                 error: function() {
                     showStatus(wpc_mpc_ajax.messages.error, 'error');
-                },
-                complete: function() {
-                    hideSpinner();
+                    isProcessing = false;
                 }
             });
-        });
+        }
 
-        // Handle update button click
-        $updateBtn.on('click', function() {
-            var blogId = $siteSelect.val();
-            
-            if (!blogId) {
-                alert(wpc_mpc_ajax.messages.select_site);
+        // Process update queue
+        function processNextUpdate() {
+            if (currentIndex >= processQueue.length || !isProcessing) {
+                // All done
+                hideSpinner();
+                if (currentIndex > 0) {
+                    showStatus(sprintf('Successfully updated product on %d sites.', currentIndex), 'success');
+                }
                 return;
             }
-
-            // Show status
-            showStatus(wpc_mpc_ajax.messages.updating);
-
-            // Make AJAX request
+            
+            var site = processQueue[currentIndex];
+            var progress = sprintf('Updating on site %d of %d...', currentIndex + 1, processQueue.length);
+            showStatus(progress);
+            
             $.ajax({
                 url: wpc_mpc_ajax.ajax_url,
                 type: 'POST',
@@ -112,23 +178,23 @@
                     action: 'wpc_mpc_update_product',
                     nonce: wpc_mpc_ajax.nonce,
                     product_id: wpc_mpc_ajax.product_id,
-                    target_blog_id: blogId
+                    target_blog_id: site.blogId
                 },
                 success: function(response) {
                     if (response.success) {
-                        showStatus(response.data.message, 'success');
+                        currentIndex++;
+                        processNextUpdate();
                     } else {
                         showStatus(response.data.message || wpc_mpc_ajax.messages.error, 'error');
+                        isProcessing = false;
                     }
                 },
                 error: function() {
                     showStatus(wpc_mpc_ajax.messages.error, 'error');
-                },
-                complete: function() {
-                    hideSpinner();
+                    isProcessing = false;
                 }
             });
-        });
+        }
 
         // Helper functions
         function showStatus(message, type) {
@@ -155,6 +221,18 @@
                 }, 5000);
             }
         }
+        
+        // Helper sprintf function
+        function sprintf(format) {
+            var args = Array.prototype.slice.call(arguments, 1);
+            return format.replace(/%[sd]/g, function(match) {
+                var replacement = args.shift();
+                return match === '%s' ? String(replacement) : Number(replacement);
+            });
+        }
+        
+        // Initialize button states
+        updateButtonStates();
     });
 
 })(jQuery);

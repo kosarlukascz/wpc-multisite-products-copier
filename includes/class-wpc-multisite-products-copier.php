@@ -28,7 +28,7 @@ class WPC_Multisite_Products_Copier {
      *
      * @var string
      */
-    private $version = '1.1.2'; // Fixed initialization timing issue
+    private $version = '1.1.3'; // Added multiple site selection on product page
 
     /**
      * Source blog ID (always 5)
@@ -193,28 +193,43 @@ class WPC_Multisite_Products_Copier {
         $current_blog_id = get_current_blog_id();
         ?>
         <div class="wpc-mpc-metabox">
-            <p>
-                <label for="wpc_mpc_target_site"><?php esc_html_e('Target Site:', 'wpc-multisite-products-copier'); ?></label>
-                <select id="wpc_mpc_target_site" name="wpc_mpc_target_site" style="width: 100%;">
-                    <option value=""><?php esc_html_e('Select a site', 'wpc-multisite-products-copier'); ?></option>
+            <div class="wpc-site-selection">
+                <label><?php esc_html_e('Select Target Sites:', 'wpc-multisite-products-copier'); ?></label>
+                <div class="wpc-sites-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 8px; margin: 8px 0;">
                     <?php foreach ($sites as $site) : ?>
                         <?php if ($site->blog_id != $current_blog_id) : ?>
-                            <option value="<?php echo esc_attr($site->blog_id); ?>" 
-                                    data-synced="<?php echo isset($synced_products[$site->blog_id]) ? '1' : '0'; ?>"
-                                    data-product-id="<?php echo isset($synced_products[$site->blog_id]) ? esc_attr($synced_products[$site->blog_id]) : ''; ?>">
+                            <?php 
+                            $is_synced = isset($synced_products[$site->blog_id]);
+                            $synced_product_id = $is_synced ? $synced_products[$site->blog_id] : '';
+                            ?>
+                            <label style="display: block; margin-bottom: 5px;">
+                                <input type="checkbox" 
+                                       class="wpc-target-site-checkbox" 
+                                       name="wpc_target_sites[]" 
+                                       value="<?php echo esc_attr($site->blog_id); ?>"
+                                       data-synced="<?php echo $is_synced ? '1' : '0'; ?>"
+                                       data-product-id="<?php echo esc_attr($synced_product_id); ?>">
                                 <?php echo esc_html($site->blogname); ?> (ID: <?php echo esc_html($site->blog_id); ?>)
-                            </option>
+                                <?php if ($is_synced) : ?>
+                                    <span style="color: #46b450; font-size: 11px;">✓ <?php esc_html_e('Synced', 'wpc-multisite-products-copier'); ?></span>
+                                <?php endif; ?>
+                            </label>
                         <?php endif; ?>
                     <?php endforeach; ?>
-                </select>
-            </p>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <a href="#" id="wpc-select-all" style="font-size: 12px;"><?php esc_html_e('Select All', 'wpc-multisite-products-copier'); ?></a> | 
+                    <a href="#" id="wpc-select-none" style="font-size: 12px;"><?php esc_html_e('Select None', 'wpc-multisite-products-copier'); ?></a> | 
+                    <a href="#" id="wpc-select-not-synced" style="font-size: 12px;"><?php esc_html_e('Select Not Synced', 'wpc-multisite-products-copier'); ?></a>
+                </div>
+            </div>
             
             <div class="wpc-mpc-actions" style="margin-top: 10px;">
-                <button type="button" id="wpc_mpc_create" class="button button-primary" disabled>
-                    <?php esc_html_e('Create on selected site', 'wpc-multisite-products-copier'); ?>
+                <button type="button" id="wpc_mpc_create_multiple" class="button button-primary" disabled>
+                    <?php esc_html_e('Create on Selected Sites', 'wpc-multisite-products-copier'); ?>
                 </button>
-                <button type="button" id="wpc_mpc_update" class="button" disabled>
-                    <?php esc_html_e('Update on selected site', 'wpc-multisite-products-copier'); ?>
+                <button type="button" id="wpc_mpc_update_multiple" class="button" disabled>
+                    <?php esc_html_e('Update on Selected Sites', 'wpc-multisite-products-copier'); ?>
                 </button>
             </div>
             
