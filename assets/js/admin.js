@@ -72,6 +72,7 @@
 
         // Handle create button click
         $createBtn.on('click', function() {
+            console.log('Create button clicked');
             var selectedSites = getSelectedSites().filter(function(site) {
                 return !site.synced;
             });
@@ -91,6 +92,7 @@
 
         // Handle update button click
         $updateBtn.on('click', function() {
+            console.log('Update button clicked');
             var selectedSites = getSelectedSites().filter(function(site) {
                 return site.synced;
             });
@@ -112,9 +114,10 @@
         function processNextCreate() {
             if (currentIndex >= processQueue.length || !isProcessing) {
                 // All done
-                hideSpinner();
                 if (currentIndex > 0) {
                     showStatus(sprintf('Successfully created product on %d sites.', currentIndex), 'success');
+                    // Ensure spinner is hidden
+                    $spinner.removeClass('is-active');
                     setTimeout(function() {
                         location.reload();
                     }, 2000);
@@ -160,9 +163,10 @@
         function processNextUpdate() {
             if (currentIndex >= processQueue.length || !isProcessing) {
                 // All done
-                hideSpinner();
                 if (currentIndex > 0) {
                     showStatus(sprintf('Successfully updated product on %d sites.', currentIndex), 'success');
+                    // Ensure spinner is hidden
+                    $spinner.removeClass('is-active');
                 }
                 return;
             }

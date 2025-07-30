@@ -28,7 +28,7 @@ class WPC_Multisite_Products_Copier {
      *
      * @var string
      */
-    private $version = '1.1.5'; // Fixed thumbnail not updating issue
+    private $version = '1.1.7'; // Added category assignment
 
     /**
      * Source blog ID (always 5)
@@ -650,6 +650,16 @@ class WPC_Multisite_Products_Copier {
             
             // Set attributes on product
             $new_product->set_attributes($new_attributes);
+            
+            // Handle product categories
+            $target_category_ids = $this->handle_product_categories($source_product_id, $target_blog_id, $source_blog_id);
+            if (!empty($target_category_ids)) {
+                $new_product->set_category_ids($target_category_ids);
+                $this->log("Set categories on new product", array(
+                    'product_id' => $new_product_id,
+                    'category_ids' => $target_category_ids
+                ));
+            }
 
             // Save product to generate variations
             $new_product->save();
@@ -1212,6 +1222,108 @@ class WPC_Multisite_Products_Copier {
         restore_current_blog();
         
         return $new_attachment_id;
+    }
+
+    /**
+     * Handle product categories from source to target
+     *
+     * @param int $source_product_id Source product ID
+     * @param int $target_blog_id Target blog ID
+     * @param int $source_blog_id Source blog ID
+     * @return array Array of target category IDs
+     */
+    private function handle_product_categories($source_product_id, $target_blog_id, $source_blog_id) {
+        $this->log("Starting category handling", array(
+            'source_product_id' => $source_product_id,
+            'source_blog_id' => $source_blog_id,
+            'target_blog_id' => $target_blog_id
+        ));
+        
+        // Get source categories
+        switch_to_blog($source_blog_id);
+        $source_categories = wp_get_post_terms($source_product_id, 'product_cat', array('fields' => 'all'));
+        restore_current_blog();
+        
+        if (empty($source_categories) || is_wp_error($source_categories)) {
+            $this->log("No categories found on source product", array(
+                'source_product_id' => $source_product_id,
+                'error' => is_wp_error($source_categories) ? $source_categories->get_error_message() : 'Empty categories'
+            ));
+            return array();
+        }
+        
+        $this->log("Found source categories", array(
+            'count' => count($source_categories),
+            'categories' => array_map(function($cat) { 
+                return array('id' => $cat->term_id, 'name' => $cat->name, 'slug' => $cat->slug); 
+            }, $source_categories)
+        ));
+        
+        // Switch to target blog to find/create matching categories
+        switch_to_blog($target_blog_id);
+        
+        $target_category_ids = array();
+        
+        foreach ($source_categories as $source_cat) {
+            // Try to find existing category by slug
+            $target_cat = get_term_by('slug', $source_cat->slug, 'product_cat');
+            
+            if ($target_cat) {
+                // Category exists, use it
+                $target_category_ids[] = (int) $target_cat->term_id;
+                $this->log("Found existing category on target", array(
+                    'source_slug' => $source_cat->slug,
+                    'target_id' => $target_cat->term_id,
+                    'target_name' => $target_cat->name
+                ));
+            } else {
+                // Category doesn't exist, create it
+                $new_cat_args = array(
+                    'slug' => $source_cat->slug,
+                    'description' => $source_cat->description
+                );
+                
+                // If source category has parent, try to find parent on target
+                if ($source_cat->parent) {
+                    // Get parent slug from source
+                    switch_to_blog($source_blog_id);
+                    $source_parent = get_term($source_cat->parent, 'product_cat');
+                    switch_to_blog($target_blog_id);
+                    
+                    if ($source_parent && !is_wp_error($source_parent)) {
+                        $target_parent = get_term_by('slug', $source_parent->slug, 'product_cat');
+                        if ($target_parent) {
+                            $new_cat_args['parent'] = $target_parent->term_id;
+                        }
+                    }
+                }
+                
+                $new_cat = wp_insert_term($source_cat->name, 'product_cat', $new_cat_args);
+                
+                if (!is_wp_error($new_cat)) {
+                    $target_category_ids[] = (int) $new_cat['term_id'];
+                    $this->log("Created new category on target", array(
+                        'name' => $source_cat->name,
+                        'slug' => $source_cat->slug,
+                        'new_id' => $new_cat['term_id']
+                    ));
+                } else {
+                    $this->log("Failed to create category", array(
+                        'name' => $source_cat->name,
+                        'error' => $new_cat->get_error_message()
+                    ), 'error');
+                }
+            }
+        }
+        
+        restore_current_blog();
+        
+        $this->log("Category handling completed", array(
+            'target_category_ids' => $target_category_ids,
+            'count' => count($target_category_ids)
+        ));
+        
+        return $target_category_ids;
     }
 
     /**
@@ -1782,6 +1894,16 @@ class WPC_Multisite_Products_Copier {
                         $target_product->set_gallery_image_ids($new_gallery_ids);
                     }
                 }
+            }
+            
+            // Handle product categories
+            $target_category_ids = $this->handle_product_categories($source_product_id, $target_blog_id, $source_blog_id);
+            if (!empty($target_category_ids)) {
+                $target_product->set_category_ids($target_category_ids);
+                $this->log("Set categories on updated product", array(
+                    'product_id' => $target_product_id,
+                    'category_ids' => $target_category_ids
+                ));
             }
             
             // Save the product with all image changes
