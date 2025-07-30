@@ -15,6 +15,7 @@ WPC Multisite Products Copier allows you to copy or update WooCommerce variable 
 - ✅ Automatic image copying and management
 - ✅ Preserve product attributes and terms
 - ✅ Automatic category assignment (matching by slug)
+- ✅ Full stock management for variations (quantity, backorders, low stock)
 - ✅ ACF (Advanced Custom Fields) support
 - ✅ Woodmart theme video gallery support
 - ✅ AJAX-powered admin interface
@@ -113,7 +114,8 @@ Supports Woodmart's video gallery feature:
 4. **Category Update** - Updates categories to match source
 5. **Image Update** - Replaces featured and gallery images
 6. **Integration Update** - Updates Woodmart video gallery
-7. **Cleanup** - Removes unused old images
+7. **Variation Update** - Updates all variations with stock management
+8. **Cleanup** - Removes unused old images
 
 ## API Reference
 
@@ -205,6 +207,12 @@ To add support for a new plugin/theme:
 3. Use blog switching utilities to manage context
 
 ## Changelog
+
+### Version 1.1.8
+- Added variation stock management during update operations
+- Updates stock quantity, manage stock settings, backorders, and low stock amount
+- Enhanced variation creation to include backorders and low stock settings
+- Variations are now matched by their attribute combinations during updates
 
 ### Version 1.1.7
 - Added automatic category assignment functionality

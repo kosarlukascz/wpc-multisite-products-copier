@@ -28,7 +28,7 @@ class WPC_Multisite_Products_Copier {
      *
      * @var string
      */
-    private $version = '1.1.7'; // Added category assignment
+    private $version = '1.1.8'; // Added variation stock management on update
 
     /**
      * Source blog ID (always 5)
@@ -849,6 +849,8 @@ class WPC_Multisite_Products_Copier {
                 $stock_status = $source_variation->get_stock_status();
                 $manage_stock = $source_variation->get_manage_stock();
                 $stock_quantity = $source_variation->get_stock_quantity();
+                $backorders = $source_variation->get_backorders();
+                $low_stock_amount = get_post_meta($variation_id, '_low_stock_amount', true);
                 $sale_date_from = $source_variation->get_date_on_sale_from();
                 $sale_date_to = $source_variation->get_date_on_sale_to();
                 $variation_attributes = $source_variation->get_attributes();
@@ -893,8 +895,16 @@ class WPC_Multisite_Products_Copier {
                     
                     $new_variation->set_stock_status($stock_status);
                     $new_variation->set_manage_stock($manage_stock);
-                    if ($manage_stock && $stock_quantity !== null) {
-                        $new_variation->set_stock_quantity($stock_quantity);
+                    if ($manage_stock) {
+                        if ($stock_quantity !== null) {
+                            $new_variation->set_stock_quantity($stock_quantity);
+                        }
+                        $new_variation->set_backorders($backorders);
+                        
+                        // Set low stock amount if available
+                        if ($low_stock_amount !== '') {
+                            update_post_meta($new_variation_id, '_low_stock_amount', $low_stock_amount);
+                        }
                     }
                     
                     // Map variation attributes to target blog slugs
@@ -1324,6 +1334,171 @@ class WPC_Multisite_Products_Copier {
         ));
         
         return $target_category_ids;
+    }
+
+    /**
+     * Update variations for a product including stock management
+     *
+     * @param int $source_product_id Source product ID
+     * @param int $target_product_id Target product ID
+     * @param int $source_blog_id Source blog ID
+     * @param int $target_blog_id Target blog ID
+     * @return bool Success status
+     */
+    private function update_product_variations($source_product_id, $target_product_id, $source_blog_id, $target_blog_id) {
+        $this->log("Starting variation update", array(
+            'source_product_id' => $source_product_id,
+            'target_product_id' => $target_product_id,
+            'source_blog_id' => $source_blog_id,
+            'target_blog_id' => $target_blog_id
+        ));
+        
+        // Get source variations
+        switch_to_blog($source_blog_id);
+        $source_product = wc_get_product($source_product_id);
+        if (!$source_product || !$source_product->is_type('variable')) {
+            restore_current_blog();
+            $this->log("Invalid source product for variation update", array(
+                'product_id' => $source_product_id
+            ), 'error');
+            return false;
+        }
+        
+        $source_variations = $source_product->get_children();
+        restore_current_blog();
+        
+        // Get target variations
+        switch_to_blog($target_blog_id);
+        $target_product = wc_get_product($target_product_id);
+        if (!$target_product || !$target_product->is_type('variable')) {
+            restore_current_blog();
+            $this->log("Invalid target product for variation update", array(
+                'product_id' => $target_product_id
+            ), 'error');
+            return false;
+        }
+        
+        $target_variations = $target_product->get_children();
+        restore_current_blog();
+        
+        $this->log("Found variations", array(
+            'source_count' => count($source_variations),
+            'target_count' => count($target_variations)
+        ));
+        
+        // Build a map of target variations by their attributes
+        $target_variation_map = array();
+        foreach ($target_variations as $target_var_id) {
+            switch_to_blog($target_blog_id);
+            $target_var = wc_get_product($target_var_id);
+            if ($target_var) {
+                $attributes = $target_var->get_attributes();
+                $attr_key = $this->generate_variation_key($attributes);
+                $target_variation_map[$attr_key] = $target_var_id;
+            }
+            restore_current_blog();
+        }
+        
+        // Update each source variation
+        foreach ($source_variations as $source_var_id) {
+            switch_to_blog($source_blog_id);
+            $source_var = wc_get_product($source_var_id);
+            if (!$source_var) {
+                restore_current_blog();
+                continue;
+            }
+            
+            // Get source variation data including stock
+            $source_attributes = $source_var->get_attributes();
+            $attr_key = $this->generate_variation_key($source_attributes);
+            
+            // Stock related data
+            $manage_stock = $source_var->get_manage_stock();
+            $stock_status = $source_var->get_stock_status();
+            $stock_quantity = $source_var->get_stock_quantity();
+            $backorders = $source_var->get_backorders();
+            $low_stock_amount = get_post_meta($source_var_id, '_low_stock_amount', true);
+            
+            // Also get prices while we're here
+            $regular_price = $source_var->get_regular_price();
+            $sale_price = $source_var->get_sale_price();
+            
+            $this->log("Source variation stock data", array(
+                'variation_id' => $source_var_id,
+                'attributes' => $source_attributes,
+                'manage_stock' => $manage_stock,
+                'stock_status' => $stock_status,
+                'stock_quantity' => $stock_quantity,
+                'backorders' => $backorders,
+                'low_stock_amount' => $low_stock_amount
+            ));
+            
+            restore_current_blog();
+            
+            // Find matching target variation
+            if (isset($target_variation_map[$attr_key])) {
+                $target_var_id = $target_variation_map[$attr_key];
+                
+                switch_to_blog($target_blog_id);
+                $target_var = wc_get_product($target_var_id);
+                
+                if ($target_var) {
+                    // Update stock management settings
+                    $target_var->set_manage_stock($manage_stock);
+                    $target_var->set_stock_status($stock_status);
+                    
+                    if ($manage_stock) {
+                        $target_var->set_stock_quantity($stock_quantity);
+                        $target_var->set_backorders($backorders);
+                        
+                        if ($low_stock_amount !== '') {
+                            update_post_meta($target_var_id, '_low_stock_amount', $low_stock_amount);
+                        }
+                    }
+                    
+                    // Also update prices
+                    if ($regular_price !== '') {
+                        $target_var->set_regular_price($regular_price);
+                    }
+                    if ($sale_price !== '') {
+                        $target_var->set_sale_price($sale_price);
+                    }
+                    
+                    // Save the variation
+                    $target_var->save();
+                    
+                    $this->log("Updated target variation", array(
+                        'target_variation_id' => $target_var_id,
+                        'manage_stock' => $manage_stock,
+                        'stock_status' => $stock_status,
+                        'stock_quantity' => $stock_quantity
+                    ));
+                }
+                
+                restore_current_blog();
+            } else {
+                $this->log("No matching target variation found for attributes", array(
+                    'attributes' => $source_attributes
+                ), 'warning');
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Generate a unique key for variation attributes
+     *
+     * @param array $attributes Variation attributes
+     * @return string Unique key
+     */
+    private function generate_variation_key($attributes) {
+        ksort($attributes);
+        $key_parts = array();
+        foreach ($attributes as $name => $value) {
+            $key_parts[] = $name . ':' . $value;
+        }
+        return implode('|', $key_parts);
     }
 
     /**
@@ -2000,6 +2175,14 @@ class WPC_Multisite_Products_Copier {
                     $target_blog_id
                 );
             }
+            
+            // Update variations including stock management
+            $this->update_product_variations(
+                $source_product_id,
+                $target_product_id,
+                $source_blog_id,
+                $target_blog_id
+            );
             
             // Clean up old images that are no longer used
             // Only delete if they're not used by other products
